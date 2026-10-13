@@ -448,30 +448,78 @@ final class Ip
     }
 
     /**
-     * 在反向代理环境下还原客户端真实 IP。
+     * 还原评论者的真实 IP。
      *
-     * 策略：仅当直连地址（REMOTE_ADDR）位于可信代理列表内时，才采信转发头；
-     * 随后从右往左跳过可信代理，取第一个不可信地址作为客户端 IP。
-     * 可信代理列表为空时，一律使用直连地址，杜绝 X-Forwarded-For 伪造。
+     * 策略由插件配置决定：
+     * 1. 未启用代理还原（proxyEnabled=0）：一律返回直连地址；
+     * 2. 启用 CIDR 校验（proxyCidr=1）：直连地址必须命中可信代理白名单，
+     *    否则不采信任何转发头；
+     * 3. 启用自定义请求头（proxyHeader=1）：优先取该头的取值；
+     * 4. 其余情况按 CDN 权威头 > X-Forwarded-For / Forwarded 链路 > 单值头
+     *    的顺序还原，并从右往左跳过可信代理。
      *
-     * @param array $headers 转发头取值，键为小写头名（x-forwarded-for / forwarded / x-real-ip / cf-connecting-ip）
+     * @param array $headers 转发头取值，键为小写头名；自定义请求头固定为 custom
      * @param string $remoteAddr 直连地址
      * @param array $trustedProxies 可信代理 CIDR 列表
+     * @param array $config 插件配置（proxyEnabled / proxyCidr / proxyHeader / proxyHeaderName）
      * @return string 还原后的地址，无法判定时返回空串
      */
-    public static function clientIp(array $headers, string $remoteAddr, array $trustedProxies): string
+    public static function clientIp(array $headers, string $remoteAddr, array $trustedProxies, array $config = []): string
     {
         $remote = self::normalize($remoteAddr) ?? '';
 
-        if (empty($trustedProxies)) {
+        /** 未启用代理还原：一律直连地址，从根源杜绝转发头伪造 */
+        if (empty($config['proxyEnabled'])) {
             return $remote;
         }
 
-        if ('' === $remote || !self::inCidrList($remote, $trustedProxies)) {
+        /** CIDR 校验：直连地址不在白名单（或白名单为空）时不采信任何转发头 */
+        if (!empty($config['proxyCidr'])
+            && ('' === $remote || empty($trustedProxies) || !self::inCidrList($remote, $trustedProxies))) {
             return $remote;
         }
 
+        /** 自定义请求头优先（头名合法且取值为合法 IP 时采用） */
+        if (!empty($config['proxyHeader']) && '' !== trim((string) ($config['proxyHeaderName'] ?? ''))) {
+            $normalized = self::normalize(trim((string) ($headers['custom'] ?? '')));
+
+            if (null !== $normalized) {
+                return $normalized;
+            }
+        }
+
+        return self::resolveFromChain($headers, $remote, $trustedProxies, !empty($config['proxyCidr']));
+    }
+
+    /**
+     * 按转发链路还原客户端地址。
+     *
+     * 启用 CIDR 校验时：从右往左跳过可信代理，取第一个不可信地址；全部可信时
+     * 退回最左侧声明值。未启用 CIDR 校验时（已由界面警告风险）：直接采信链路
+     * 最右端——即离源站最近一跳所报告的客户端地址，不再校验来源。
+     *
+     * @param array $headers 转发头取值
+     * @param string $remote 已归一化的直连地址
+     * @param array $trustedProxies 可信代理 CIDR 列表
+     * @param bool $cidrCheck 是否启用 CIDR 校验
+     * @return string
+     */
+    private static function resolveFromChain(array $headers, string $remote, array $trustedProxies, bool $cidrCheck = true): string
+    {
         $chain = self::buildForwardChain($headers);
+
+        if (!$cidrCheck) {
+            for ($i = count($chain) - 1; $i >= 0; $i--) {
+                $candidate = self::normalize((string) $chain[$i]);
+
+                if (null !== $candidate) {
+                    return $candidate;
+                }
+            }
+
+            return $remote;
+        }
+
         $chain[] = $remote;
 
         /** 从右往左跳过可信代理，取第一个不可信地址 */
@@ -502,12 +550,24 @@ final class Ip
     /**
      * 构造从左到右的转发链路。
      *
+     * 优先级：CDN 权威头（EO-Connecting-IP / CF-Connecting-IP，由 CDN 边缘
+     * 写入、客户端无法伪造）> X-Forwarded-For / Forwarded 链路 > 其余单值头。
+     *
      * @param array $headers 转发头取值
      * @return array
      */
     private static function buildForwardChain(array $headers): array
     {
         $chain = [];
+
+        /** CDN 权威头优先：EdgeOne（EO-Connecting-IP）与 Cloudflare（CF-Connecting-IP） */
+        foreach (['eo-connecting-ip', 'cf-connecting-ip'] as $key) {
+            $normalized = self::normalize(trim((string) ($headers[$key] ?? '')));
+
+            if (null !== $normalized) {
+                return [$normalized];
+            }
+        }
 
         foreach (['x-forwarded-for', 'forwarded'] as $key) {
             $value = $headers[$key] ?? '';
@@ -533,8 +593,8 @@ final class Ip
             }
         }
 
-        /** 单值头作为兜底 */
-        foreach (['cf-connecting-ip', 'x-real-ip', 'x-client-ip', 'client-ip'] as $key) {
+        /** 其余单值头作为兜底 */
+        foreach (['x-real-ip', 'x-client-ip', 'client-ip'] as $key) {
             $normalized = self::normalize(trim((string) ($headers[$key] ?? '')));
 
             if (null !== $normalized) {

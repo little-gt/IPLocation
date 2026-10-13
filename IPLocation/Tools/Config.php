@@ -41,6 +41,10 @@ final class Config
         'cache'          => 1,
         'cacheTtl'       => 30,
         'trustedProxies' => '',
+        'proxyEnabled'   => 0,
+        'proxyCidr'      => 1,
+        'proxyHeader'    => 0,
+        'proxyHeaderName' => '',
         'anonymousStore' => 0,
         'unknownText'    => '未知',
         'trimSuffix'     => 1,
@@ -158,7 +162,17 @@ final class Config
                 case 'anonymousStore':
                 case 'trimSuffix':
                 case 'showIsp':
+                case 'proxyCidr':
+                case 'proxyHeader':
                     $result[$key] = empty($value) ? 0 : 1;
+                    break;
+                case 'proxyEnabled':
+                    /** 兼容旧版：未显式设置过该开关但配置过可信代理的用户，视为启用 */
+                    if (!array_key_exists('proxyEnabled', $input) && '' !== trim((string) ($input['trustedProxies'] ?? ''))) {
+                        $result[$key] = 1;
+                    } else {
+                        $result[$key] = empty($value) ? 0 : 1;
+                    }
                     break;
                 case 'format':
                     /** 模板只允许占位符与普通文本，长度受限 */
@@ -173,6 +187,7 @@ final class Config
                     $result[$key] = self::clip(trim((string) $value), 2000);
                     break;
                 case 'dataDir':
+                case 'proxyHeaderName':
                 case 'fileIp2RegionV4':
                 case 'fileIp2RegionV6':
                 case 'fileGeoipCity':

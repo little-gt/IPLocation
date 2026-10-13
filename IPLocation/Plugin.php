@@ -426,7 +426,71 @@ class Plugin implements PluginInterface
         );
         $form->addInput($cacheTtl);
 
-        $trustedProxiesDescription = $styles . _t('每行一条 CIDR 或单个地址，# 开头为注释。');
+        $proxyEnabledDescription = $styles . _t('是否从反向代理的转发头中还原评论者真实 IP。');
+        $proxyEnabledDescription .= '<div class="ipl-info-box--gray" style="padding:10px;margin-top:8px;">';
+        $proxyEnabledDescription .= '<span class="ipl-text-dim">' . _t(
+            '关闭：一律使用直连地址 REMOTE_ADDR，任何转发头均不可信（最安全，推荐直连部署使用）。'
+            . '开启：按下方「CIDR 白名单校验 / 自定义请求头」的规则还原真实 IP。'
+        ) . '</span>';
+        $proxyEnabledDescription .= '</div>';
+
+        $form->addInput(new Radio(
+            'proxyEnabled',
+            [1 => _t('开启'), 0 => _t('关闭')],
+            0,
+            _t('代理 IP 还原'),
+            $proxyEnabledDescription
+        ));
+
+        $proxyCidrDescription = $styles . _t('启用后，仅当直连地址命中下方白名单时才采信转发头。');
+        $proxyCidrDescription .= '<div class="ipl-info-box--yellow" style="padding:10px;margin-top:8px;">';
+        $proxyCidrDescription .= '<strong class="ipl-warn-danger">' . _t('安全提示：') . '</strong>';
+        $proxyCidrDescription .= '<span class="ipl-text-muted">' . _t(
+            '启用 CIDR 需要确保当前 CDN 回源 IP 固定，且已全部填入下方白名单，且定期更新；'
+          . '关闭 CIDR 需要确保当前 CDN 双向验证，并避免源站 IP 被直接访问，以避免伪造攻击。'
+        ) . '</span>';
+        $proxyCidrDescription .= '</div>';
+
+        $form->addInput(new Radio(
+            'proxyCidr',
+            [1 => _t('开启'), 0 => _t('关闭')],
+            1,
+            _t('CIDR 白名单校验'),
+            $proxyCidrDescription
+        ));
+
+        $proxyHeaderDescription = $styles . _t('启用后，优先读取你在下方填写的请求头获取客户端 IP，其次才是内置转发头。');
+        $proxyHeaderDescription .= '<div class="ipl-info-box--gray" style="padding:10px;margin-top:8px;">';
+        $proxyHeaderDescription .= '<span class="ipl-text-dim">' . _t(
+            '适用于 CDN 回源时写入自定义头的场景（如自建网关、边缘函数）；'
+            . '该头取值必须是合法 IP，否则自动回退到内置转发头。'
+        ) . '</span>';
+        $proxyHeaderDescription .= '</div>';
+
+        $form->addInput(new Radio(
+            'proxyHeader',
+            [1 => _t('开启'), 0 => _t('关闭')],
+            0,
+            _t('自定义请求头'),
+            $proxyHeaderDescription
+        ));
+
+        $form->addInput(new Text(
+            'proxyHeaderName',
+            null,
+            '',
+            _t('自定义请求头名称'),
+            _t('如 X-Client-IP；仅允许字母、数字与 - _ . ，开启「自定义请求头」后生效')
+        ));
+
+        $trustedProxiesDescription = $styles . _t('每行一条 CIDR 或单个地址，# 开头为注释；「CIDR 白名单校验」开启时生效。');
+        $trustedProxiesDescription .= '<div class="ipl-info-box--gray" style="padding:10px;margin-top:8px;">';
+        $trustedProxiesDescription .= '<strong>' . _t('支持的转发头：') . '</strong>';
+        $trustedProxiesDescription .= '<span class="ipl-text-dim">' . _t(
+            'EO-Connecting-IP（EdgeOne）、CF-Connecting-IP（Cloudflare）、X-Forwarded-For、'
+            . 'Forwarded、X-Real-IP、X-Client-IP、Client-IP。'
+        ) . '</span>';
+        $trustedProxiesDescription .= '</div>';
         $trustedProxiesDescription .= '<div class="ipl-info-box--yellow" style="padding:10px;margin-top:8px;">';
         $trustedProxiesDescription .= '<strong class="ipl-warn-danger">' . _t('安全提示：') . '</strong>';
         $trustedProxiesDescription .= '<span class="ipl-text-muted">' . _t(
@@ -482,13 +546,26 @@ class Plugin implements PluginInterface
         $headers = [
             'x-forwarded-for'   => (string) $request->getHeader('X-Forwarded-For'),
             'forwarded'         => (string) $request->getHeader('Forwarded'),
+            'eo-connecting-ip'  => (string) $request->getHeader('EO-Connecting-IP'),
             'cf-connecting-ip'  => (string) $request->getHeader('CF-Connecting-IP'),
             'x-real-ip'         => (string) $request->getHeader('X-Real-Ip'),
             'x-client-ip'       => (string) $request->getHeader('X-Client-Ip'),
             'client-ip'         => (string) $request->getHeader('Client-Ip'),
         ];
 
-        $ip = Ip::clientIp($headers, (string) $request->getServer('REMOTE_ADDR'), Config::proxyList());
+        /** 自定义请求头（「自定义请求头」开关启用时优先采信） */
+        $customName = trim((string) $config['proxyHeaderName']);
+
+        if ('' !== $customName) {
+            $headers['custom'] = (string) $request->getHeader($customName);
+        }
+
+        $ip = Ip::clientIp(
+            $headers,
+            (string) $request->getServer('REMOTE_ADDR'),
+            Config::proxyList(),
+            $config
+        );
 
         if ('' === $ip) {
             return $comment;

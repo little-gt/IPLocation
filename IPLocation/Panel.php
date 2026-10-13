@@ -170,6 +170,13 @@ if (null === $stats) {
         );
 
         $counter = [];
+        $invalid = 0;
+
+        foreach ($rows as $row) {
+            if (null === Ip::normalize((string) ($row['ip'] ?? ''))) {
+                $invalid++;
+            }
+        }
 
         foreach (Resolver::resolveMany(array_column($rows, 'ip')) as $location) {
             $label = Resolver::label($location);
@@ -177,7 +184,11 @@ if (null === $stats) {
         }
 
         arsort($counter);
-        $stats = ['total' => count($rows), 'counter' => array_slice($counter, 0, 12, true)];
+        $stats = [
+            'total'   => count($rows),
+            'invalid' => $invalid,
+            'counter' => array_slice($counter, 0, 12, true),
+        ];
     } catch (\Throwable $e) {
         $stats = ['total' => 0, 'counter' => [], 'error' => $e->getMessage()];
     }
@@ -216,6 +227,11 @@ $configRows = [
     _t('后台展示')    => $config['showAdmin'] ? _t('开启') : _t('关闭'),
     _t('隐私级别')    => 'masked' === $config['privacy'] ? _t('属地 + 脱敏 IP') : _t('只显示属地'),
     _t('缓存')        => $config['cache'] ? _t('开启（%d 天）', $config['cacheTtl']) : _t('关闭'),
+    _t('代理还原')    => empty($config['proxyEnabled']) ? _t('关闭（一律 REMOTE_ADDR）') : _t('开启'),
+    _t('CIDR 校验')   => empty($config['proxyEnabled']) ? '-'
+        : (empty($config['proxyCidr']) ? _t('关闭') : _t('开启（%d 条白名单）', count($trustedProxies))),
+    _t('自定义请求头') => empty($config['proxyEnabled']) || empty($config['proxyHeader'])
+        ? _t('关闭') : ('' !== $config['proxyHeaderName'] ? $config['proxyHeaderName'] : _t('未填写头名')),
     _t('可信代理')    => empty($trustedProxies) ? _t('未配置') : _t('%d 条', count($trustedProxies)),
     _t('入库策略')    => $config['anonymousStore'] ? _t('匿名化后入库') : _t('保存原始 IP'),
 ];
@@ -510,7 +526,7 @@ $resultFields = [
                     </div>
                 </div>
                 <div class="px-5 py-3 border-t text-xs" style="border-color: var(--ipl-border); color: var(--ipl-muted);">
-                    <?php echo _t('GeoLite2 由 MaxMind 每周更新，请定期下载新版 mmdb 覆盖同名文件；ip2region 库升级后同样需要清空解析缓存。'); ?>
+                    <?php echo _t('GeoLite2 由 MaxMind 每周更新，请定期下载新版 mmdb 覆盖同名文件；ip2region 库升级后同样需要清空解析缓存。库目录与文件名均可在设置中自定义，改名后解析缓存自动失效。'); ?>
                 </div>
             </div>
 
@@ -631,6 +647,9 @@ $resultFields = [
                             <?php endforeach; ?>
                         </div>
                         <p class="text-xs mt-4" style="color: var(--ipl-muted);"><?php echo _t('基于最近 %d 条评论统计，结果缓存 10 分钟', $stats['total']); ?></p>
+                        <?php if (!empty($stats['invalid'])): ?>
+                            <p class="text-xs mt-1" style="color: var(--ipl-muted);"><?php echo _t('另有 %d 条评论的 IP 为空或格式非法，未纳入统计', (int) $stats['invalid']); ?></p>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             </div>
@@ -647,7 +666,7 @@ $resultFields = [
                                 <span>自动数据源下优先查询 ip2region（中文省市与运营商，离线毫秒级）</span>
                             </li>
                             <li class="flex gap-3">
-                                <span>ip2region 返回「未知 / 0」或字段不全时，自动改查 MaxMind GeoLite2，并用其结果补全国籍代码、经纬度、时区、ASN 等细节</span>
+                                <span>ip2region 返回「未知 / 0 / Reserved」或字段不全时，自动改查 MaxMind GeoLite2，并用其结果补全国籍代码、经纬度、时区、ASN 等细节</span>
                             </li>
                             <li class="flex gap-3">
                                 <span>两个引擎都未命中时输出「<?php echo ipl_escape($config['unknownText']); ?>」；局域网、环回等地址直接给出类型文案，不查库也不暴露细节</span>
@@ -666,12 +685,33 @@ $resultFields = [
                     <div class="p-5">
                         <ul class="space-y-3 text-sm" style="color: var(--ipl-muted);">
                             <li class="flex gap-3">
-                                <span><?php echo empty($trustedProxies)
-                                    ? _t('当前未配置可信代理，插件一律使用直连地址 REMOTE_ADDR，可杜绝 X-Forwarded-For 伪造；站点位于 CDN 之后时请在设置中填写 CDN 的 IP 段')
-                                    : _t('已启用可信代理校验：仅当直连地址命中列表时才采信转发头，并从右往左跳过可信代理取真实客户端地址'); ?></span>
+                                <span><?php
+                                if (empty($config['proxyEnabled'])) {
+                                    echo _t('当前未启用代理 IP 还原，一律使用直连地址 REMOTE_ADDR，可杜绝转发头伪造');
+                                } elseif (!empty($config['proxyCidr'])) {
+                                    echo empty($trustedProxies)
+                                        ? _t('已启用 CIDR 校验但白名单为空：将一律使用 REMOTE_ADDR，请在设置中补充 CDN 回源 IP 段')
+                                        : _t('已启用 CIDR 校验（%d 条）：仅当直连地址命中白名单时才采信转发头，并从右往左跳过可信代理取真实客户端地址', count($trustedProxies));
+                                } else {
+                                    echo _t('已开启代理还原但关闭了 CIDR 校验：任何直达源站的请求都可能伪造客户端 IP，建议补充白名单或配置 CDN 回源认证');
+                                }
+                                ?></span>
                             </li>
                             <li class="flex gap-3">
-                                <span><?php echo _t('前台默认只输出归属地文案，不展示完整 IP；需要排障时可临时切换为「属地 + 脱敏 IP」'); ?></span>
+                                <span><?php
+                                if (empty($config['showFront'])) {
+                                    echo _t('前台评论属地已关闭，仅在后台评论列表展示');
+                                } elseif ('masked' === $config['privacy']) {
+                                    echo _t('当前为「属地 + 脱敏 IP」模式：IPv4 隐藏最后一段（1.2.3.*），IPv6 仅保留前两段');
+                                } else {
+                                    echo _t('前台只输出归属地文案，不展示完整 IP；需要排障时可临时切换为「属地 + 脱敏 IP」');
+                                }
+                                ?></span>
+                            </li>
+                            <li class="flex gap-3">
+                                <span><?php echo empty($config['anonymousStore'])
+                                    ? _t('评论 IP 按原始值入库，请知悉你所在地的隐私合规要求')
+                                    : _t('评论 IP 匿名化后入库（IPv4 归零最后一段，IPv6 保留前 3 段），按 IP 的封禁与查重精度会受影响'); ?></span>
                             </li>
                             <li class="flex gap-3">
                                 <span><?php echo _t('归属地文案一律经过 HTML 转义输出，属地库路径不接受外部输入，缓存键限定为 md5'); ?></span>
