@@ -132,6 +132,13 @@ if ($request->isPost()) {
 
 $config = Config::all();
 $statusList = Resolver::status();
+$customFiles = array_filter([
+    $config['fileIp2RegionV4'],
+    $config['fileIp2RegionV6'],
+    $config['fileGeoipCity'],
+    $config['fileGeoipCountry'],
+    $config['fileGeoipAsn'],
+]);
 $cacheStats = Cache::stats();
 $trustedProxies = Config::proxyList();
 $availableDatabases = 0;
@@ -197,6 +204,8 @@ $configRows = [
     _t('回退策略')    => empty($config['fallback']) ? _t('关闭') : _t('ip2region 未命中回退 GeoLite2'),
     _t('细节补全')    => empty($config['enrich']) ? _t('关闭') : _t('用 GeoLite2 补全缺失字段'),
     _t('GeoLite2 库') => $config['geoipDatabase'],
+    _t('库目录')      => basename(Config::databaseDir()),
+    _t('库文件命名') => empty($customFiles) ? _t('默认') : _t('%d 个自定义', count($customFiles)),
     _t('展示语言')    => $config['language'],
     _t('展示粒度')    => $detailLabels[$config['detail']] ?? $config['detail'],
     _t('自定义模板')  => '' === $config['format'] ? _t('未设置（按粒度生成）') : $config['format'],
@@ -426,6 +435,7 @@ $resultFields = [
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide border-b" style="color: var(--ipl-muted); border-color: var(--ipl-border);"><?php echo _t('大小'); ?></th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide border-b" style="color: var(--ipl-muted); border-color: var(--ipl-border);"><?php echo _t('库版本 / 构建'); ?></th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide border-b" style="color: var(--ipl-muted); border-color: var(--ipl-border);"><?php echo _t('文件时间'); ?></th>
+<th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide border-b" style="color: var(--ipl-muted); border-color: var(--ipl-border);"><?php echo _t('文件名'); ?></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -446,6 +456,7 @@ $resultFields = [
                                         <td class="px-4 py-3 text-sm" style="color: var(--ipl-muted);"><?php echo ipl_escape(!empty($file['size']) ? ipl_size($file['size']) : '-'); ?></td>
                                         <td class="px-4 py-3 text-sm" style="color: var(--ipl-muted);"><?php echo ipl_escape($status['buildDate'] ?: ($status['databaseType'] ?: '-')); ?></td>
                                         <td class="px-4 py-3 text-sm" style="color: var(--ipl-muted);"><?php echo ipl_escape(!empty($file['modified']) ? date('Y-m-d', (int) $file['modified']) : '-'); ?></td>
+                                        <td class="px-4 py-3 text-sm" style="color: var(--ipl-muted);"><?php echo ipl_escape(!empty($file['path']) ? basename($file['path']) : '-'); ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php endforeach; ?>
@@ -488,6 +499,10 @@ $resultFields = [
                                     <div class="flex justify-between items-center py-2 gap-3">
                                         <span class="text-xs font-medium" style="color: var(--ipl-muted);"><?php echo _t('文件时间'); ?></span>
                                         <span class="text-sm text-right" style="color: var(--ipl-text);"><?php echo ipl_escape(!empty($file['modified']) ? date('Y-m-d', (int) $file['modified']) : '-'); ?></span>
+                                    </div>
+                                    <div class="flex justify-between items-center py-2 gap-3">
+                                        <span class="text-xs font-medium" style="color: var(--ipl-muted);"><?php echo _t('文件名'); ?></span>
+                                        <span class="text-sm text-right break-all" style="color: var(--ipl-text);"><?php echo ipl_escape(!empty($file['path']) ? basename($file['path']) : '-'); ?></span>
                                     </div>
                                 </div>
                             <?php endforeach; ?>

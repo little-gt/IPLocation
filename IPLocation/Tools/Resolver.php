@@ -256,10 +256,10 @@ final class Resolver
     }
 
     /**
-     * 缓存键：地址 + 引擎组合 + 库文件与语言。
+     * 缓存键：地址 + 引擎组合 + 库目录、库文件与语言。
      *
-     * 自动 + 回退模式下结果可能来自两个引擎，键中同时体现两侧库文件，
-     * 避免只升级一侧库后命中旧缓存。
+     * 自动 + 回退模式下结果可能来自两个引擎，键中同时体现两侧库文件；
+     * 目录名与文件名均入键，改名（含迁移目录）后旧缓存自动失效。
      *
      * @param string $ip 已归一化地址
      * @param array $config 插件配置
@@ -268,14 +268,15 @@ final class Resolver
     private static function cacheKey(string $ip, array $config): string
     {
         $files = Config::databaseFiles();
+        $dir = basename(Config::databaseDir()) . '/';
         $mix = Config::SOURCE_AUTO === $config['dataSource'] && !empty($config['fallback']);
 
         $database = $mix
-            ? 'mix:' . basename($files['ip2region_v4']) . '|' . basename($files['ip2region_v6'])
-                . '|' . basename(Config::databaseFile(Config::geoipDatabaseKey()))
+            ? 'mix:' . $dir . basename($files['ip2region_v4']) . '|' . $dir . basename($files['ip2region_v6'])
+                . '|' . $dir . basename(Config::databaseFile(Config::geoipDatabaseKey()))
             : (Config::SOURCE_IP2REGION === $config['dataSource']
-                ? 'ip2region:' . basename($files['ip2region_v4']) . ':' . basename($files['ip2region_v6'])
-                : Config::databaseFile(Config::geoipDatabaseKey()));
+                ? 'ip2region:' . $dir . basename($files['ip2region_v4']) . ':' . $dir . basename($files['ip2region_v6'])
+                : $dir . Config::databaseFile(Config::geoipDatabaseKey()));
 
         return Cache::key(
             $ip,

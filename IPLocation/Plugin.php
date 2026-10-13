@@ -210,6 +210,89 @@ class Plugin implements PluginInterface
         );
         $form->addInput($geoipDatabase);
 
+        /** ── 自定义库目录与库文件名（安全加固：避免默认路径被探测） ── */
+        $defaultDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'Database';
+        $dir = Config::databaseDir();
+        $present = [];
+        $dirWarning = '';
+
+        if (is_dir($dir)) {
+            foreach (scandir($dir) ?: [] as $name) {
+                if ('.' !== $name && '..' !== $name && is_file($dir . DIRECTORY_SEPARATOR . $name)) {
+                    $present[] = $name;
+                }
+            }
+        } elseif (is_dir($defaultDir)) {
+            $dirWarning = _t('当前配置的库目录不存在，以下显示的是默认 Database 目录的内容；如已改名，请把文件夹同步改名为上方填写名称。');
+
+            foreach (scandir($defaultDir) ?: [] as $name) {
+                if ('.' !== $name && '..' !== $name && is_file($defaultDir . DIRECTORY_SEPARATOR . $name)) {
+                    $present[] = $name;
+                }
+            }
+        }
+
+        $form->addInput(new Text(
+            'dataDir',
+            null,
+            '',
+            _t('归属地库目录名'),
+            $styles . _t('默认 Database。为安全起见，可修改该文件夹的名称（连同内部库文件一起移动），再把新名称填在这里。')
+            . '<div class="ipl-info-box--yellow" style="padding:10px;margin-top:8px;">'
+            . '<strong class="ipl-warn-danger">' . _t('注意：') . '</strong>'
+            . '<span class="ipl-text-muted">' . _t(
+                '仅允许字母、数字与 . _ - ，不含路径分隔符；留空或非法时使用默认目录。'
+                . '改名后解析缓存随目录名自动失效，无需手动清空；Apache 下随文件夹迁移的 .htaccess 会继续生效。'
+            ) . '</span></div>'
+        ));
+
+        $filesDescription = $styles . _t('为安全起见，还可自行修改库文件的名称，再把新名称填在下方对应输入框。');
+        $filesDescription .= '<div class="ipl-info-box--yellow" style="padding:10px;margin-top:8px;">';
+        $filesDescription .= '<strong class="ipl-warn-danger">' . _t('注意：') . '</strong>';
+        $filesDescription .= '<span class="ipl-text-muted">' . _t(
+            '留空使用默认名；仅允许字母、数字与 . _ - ，且不含路径分隔符，非法输入自动回落默认名。'
+            . '解析缓存键含库文件名，改名后旧缓存自动失效，无需手动清空。'
+        ) . '</span>';
+        $filesDescription .= '</div>';
+
+        if ('' !== $dirWarning) {
+            $filesDescription .= '<div class="ipl-info-box--yellow" style="padding:10px;margin-top:8px;">';
+            $filesDescription .= '<strong class="ipl-warn-danger">' . _t('注意：') . '</strong>';
+            $filesDescription .= '<span class="ipl-text-muted">' . $dirWarning . '</span>';
+            $filesDescription .= '</div>';
+        }
+
+        if (!empty($present)) {
+            $scanned = is_dir($dir) ? $dir : $defaultDir;
+            $filesDescription .= '<div class="ipl-info-box--gray" style="padding:10px;margin-top:8px;">';
+            $filesDescription .= '<strong>' . _t('目录 %s 下的文件：', basename($scanned)) . '</strong><br>';
+            $filesDescription .= '<span class="ipl-text-dim">'
+                . implode('、', array_map('htmlspecialchars', $present)) . '</span>';
+            $filesDescription .= '</div>';
+        }
+
+        $fileFields = [
+            'fileIp2RegionV4'  => [_t('ip2region IPv4 库文件名'), 'ip2region_v4.xdb'],
+            'fileIp2RegionV6'  => [_t('ip2region IPv6 库文件名'), 'ip2region_v6.xdb'],
+            'fileGeoipCity'    => [_t('GeoLite2-City 文件名'), 'GeoLite2-City.mmdb'],
+            'fileGeoipCountry' => [_t('GeoLite2-Country 文件名'), 'GeoLite2-Country.mmdb'],
+            'fileGeoipAsn'     => [_t('GeoLite2-ASN 文件名'), 'GeoLite2-ASN.mmdb'],
+        ];
+
+        $first = true;
+
+        foreach ($fileFields as $key => [$label, $default]) {
+            $form->addInput(new Text(
+                $key,
+                null,
+                '',
+                $label,
+                $first ? $filesDescription : _t('留空使用默认名 %s', $default)
+            ));
+
+            $first = false;
+        }
+
         $language = new Select(
             'language',
             [

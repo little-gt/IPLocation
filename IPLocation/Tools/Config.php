@@ -45,6 +45,12 @@ final class Config
         'unknownText'    => '未知',
         'trimSuffix'     => 1,
         'showIsp'        => 0,
+        'fileIp2RegionV4'   => '',
+        'fileIp2RegionV6'   => '',
+        'fileGeoipCity'     => '',
+        'fileGeoipCountry'  => '',
+        'fileGeoipAsn'      => '',
+        'dataDir'           => '',
     ];
 
     /**
@@ -166,6 +172,15 @@ final class Config
                 case 'trustedProxies':
                     $result[$key] = self::clip(trim((string) $value), 2000);
                     break;
+                case 'dataDir':
+                case 'fileIp2RegionV4':
+                case 'fileIp2RegionV6':
+                case 'fileGeoipCity':
+                case 'fileGeoipCountry':
+                case 'fileGeoipAsn':
+                    /** 自定义目录名 / 库文件名：仅允许纯名称，非法值回落默认 */
+                    $result[$key] = self::safeFileName((string) $value);
+                    break;
                 default:
                     $result[$key] = $value;
             }
@@ -228,6 +243,31 @@ final class Config
     }
 
     /**
+     * 校验自定义目录名 / 库文件名。
+     *
+     * 仅允许纯名称（字母 / 数字 / 点 / 中划线 / 下划线，且以字母数字开头），
+     * 长度不超过 64，不得包含路径分隔符与「..」，从输入层面杜绝路径穿越；
+     * 非法或超长一律返回空串，表示回落默认名称。
+     *
+     * @param string $value 用户输入
+     * @return string
+     */
+    private static function safeFileName(string $value): string
+    {
+        $value = trim($value);
+
+        if ('' === $value || strlen($value) > 64) {
+            return '';
+        }
+
+        if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]*$/', $value) || false !== strpos($value, '..')) {
+            return '';
+        }
+
+        return $value;
+    }
+
+    /**
      * 插件根目录。
      *
      * 本文件位于 Tools/ 下，根目录需上退一级。
@@ -242,11 +282,17 @@ final class Config
     /**
      * 归属地库目录。
      *
+     * 支持自定义目录名（安全加固：避免默认 Database 目录名被探测）；
+     * 未配置或非法时使用默认名 Database。
+     *
      * @return string
      */
     public static function databaseDir(): string
     {
-        return dirname(__DIR__) . DIRECTORY_SEPARATOR . 'Database';
+        $config = self::all();
+        $custom = trim((string) ($config['dataDir'] ?? ''));
+
+        return dirname(__DIR__) . DIRECTORY_SEPARATOR . ('' !== $custom ? $custom : 'Database');
     }
 
     /**
@@ -260,21 +306,53 @@ final class Config
     }
 
     /**
+     * 内置默认库文件名（未自定义时使用）。
+     *
+     * @var array
+     */
+    private const DEFAULT_FILES = [
+        'ip2region_v4'   => 'ip2region_v4.xdb',
+        'ip2region_v6'   => 'ip2region_v6.xdb',
+        'geoip2_city'    => 'GeoLite2-City.mmdb',
+        'geoip2_country' => 'GeoLite2-Country.mmdb',
+        'geoip2_asn'     => 'GeoLite2-ASN.mmdb',
+    ];
+
+    /**
+     * 库标识到自定义文件名配置键的映射（留空表示使用默认名）。
+     *
+     * @var array
+     */
+    private const FILE_KEYS = [
+        'ip2region_v4'   => 'fileIp2RegionV4',
+        'ip2region_v6'   => 'fileIp2RegionV6',
+        'geoip2_city'    => 'fileGeoipCity',
+        'geoip2_country' => 'fileGeoipCountry',
+        'geoip2_asn'     => 'fileGeoipAsn',
+    ];
+
+    /**
      * 可用归属地库文件的绝对路径表。
+     *
+     * 库目录名与每个库的文件名都支持在设置中自定义（安全加固：避免默认
+     * 路径被探测）；自定义值为空或非法时回落默认名。解析结果的缓存键含
+     * 目录名与库文件名，改名后旧缓存自动失效，无需手动清空。
      *
      * @return array 键为库标识，值为绝对路径
      */
     public static function databaseFiles(): array
     {
         $dir = self::databaseDir();
+        $config = self::all();
+        $files = [];
 
-        return [
-            'ip2region_v4' => $dir . DIRECTORY_SEPARATOR . 'ip2region_v4.xdb',
-            'ip2region_v6' => $dir . DIRECTORY_SEPARATOR . 'ip2region_v6.xdb',
-            'geoip2_city'  => $dir . DIRECTORY_SEPARATOR . 'GeoLite2-City.mmdb',
-            'geoip2_country' => $dir . DIRECTORY_SEPARATOR . 'GeoLite2-Country.mmdb',
-            'geoip2_asn'   => $dir . DIRECTORY_SEPARATOR . 'GeoLite2-ASN.mmdb',
-        ];
+        foreach (self::DEFAULT_FILES as $key => $default) {
+            $custom = trim((string) ($config[self::FILE_KEYS[$key]] ?? ''));
+
+            $files[$key] = $dir . DIRECTORY_SEPARATOR . ('' !== $custom ? $custom : $default);
+        }
+
+        return $files;
     }
 
     /**
