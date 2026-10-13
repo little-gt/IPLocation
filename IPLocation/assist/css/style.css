@@ -1,0 +1,219 @@
+/**
+ * IPLocation Plugin Styles
+ * 与 Passkey 面板一致的设计语言：CSS 变量主题、直角边框、暗色模式跟随系统。
+ */
+
+/* ========================================
+ * Light Mode Defaults
+ * ======================================== */
+:root {
+    color-scheme: light;
+
+    /* === Primary Colors === */
+    --ipl-primary: #5865f2;
+    --ipl-primary-hover: #4752c4;
+
+    /* === Background Colors === */
+    --ipl-bg: #f2f3f5;
+    --ipl-surface: #ffffff;
+    --ipl-surface-2: #f9fafb;
+
+    /* === Text Colors === */
+    --ipl-text: #2e3338;
+    --ipl-muted: #5c5e66;
+
+    /* === Border Colors === */
+    --ipl-border: #e5e7eb;
+    --ipl-border-strong: #d1d5db;
+
+    /* === Semantic Colors - Success === */
+    --ipl-success: #16a34a;
+    --ipl-success-bg: #def7ec;
+
+    /* === Semantic Colors - Danger === */
+    --ipl-danger: #dc2626;
+    --ipl-error-bg: #fde8e8;
+
+    /* === Semantic Colors - Info === */
+    --ipl-info: #2563eb;
+    --ipl-info-bg: #eff6ff;
+
+    /* === Semantic Colors - Warning === */
+    --ipl-warning: #ea580c;
+    --ipl-warning-bg: #fff6bf;
+
+    /* === Rectangular Design Specification (border-radius: 0) === */
+    --ipl-radius-sm: 0px;
+    --ipl-radius-md: 0px;
+    --ipl-radius-lg: 0px;
+}
+
+/* ========================================
+ * Dark Mode Override
+ * ======================================== */
+@media (prefers-color-scheme: dark) {
+    :root {
+        color-scheme: dark;
+
+        /* === Primary Colors === */
+        --ipl-primary: #6366c7;
+        --ipl-primary-hover: #7c7fd6;
+
+        /* === Background Colors === */
+        --ipl-bg: #000000;
+        --ipl-surface: #0d0d0d;
+        --ipl-surface-2: #151515;
+
+        /* === Text Colors === */
+        --ipl-text: #e4e4e7;
+        --ipl-muted: #a1a1aa;
+
+        /* === Border Colors === */
+        --ipl-border: #222222;
+        --ipl-border-strong: #333333;
+
+        /* === Semantic Colors === */
+        --ipl-success: #6bc78a;
+        --ipl-success-bg: #0a1f12;
+        --ipl-danger: #e07a7a;
+        --ipl-error-bg: #2a0c10;
+        --ipl-info: #7aadf0;
+        --ipl-info-bg: #081420;
+        --ipl-warning: #d4a72a;
+        --ipl-warning-bg: #2a2208;
+    }
+}
+
+/* ========================================
+ * Base
+ * ======================================== */
+body {
+    font-family: 'Inter', 'Noto Sans SC', system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+code,
+pre,
+.IPLocation-code,
+.ipl-code {
+    font-family: 'Cascadia Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+button,
+input,
+select,
+textarea {
+    font-family: inherit;
+}
+
+/* ========================================
+ * Info Box（与 Passkey 一致的说明卡片）
+ * ======================================== */
+.ipl-info-box {
+    padding: 12px 15px;
+    border-left: 3px solid var(--ipl-muted);
+    background: var(--ipl-surface-2);
+    color: var(--ipl-text);
+    font-size: 13px;
+    line-height: 1.6;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    border-radius: var(--ipl-radius-md);
+}
+
+.ipl-info-box > i {
+    margin-top: 3px;
+    flex-shrink: 0;
+}
+
+.ipl-info-box--blue {
+    background: #f0f9ff;
+    border-left-color: #0ea5e9;
+}
+
+.ipl-info-box--gray {
+    background: #f5f5f5;
+    border-left-color: #467b96;
+}
+
+.ipl-info-box--yellow {
+    background: #fff3cd;
+    border-left-color: #ffc107;
+}
+
+@media (prefers-color-scheme: dark) {
+    .ipl-info-box--blue {
+        background: #0c2d48;
+        border-left-color: #0ea5e9;
+    }
+
+    .ipl-info-box--gray {
+        background: #1a1a2e;
+        border-left-color: #6ba3be;
+    }
+
+    .ipl-info-box--yellow {
+        background: #332b00;
+        border-left-color: #fbbf24;
+    }
+}
+
+/* ========================================
+ * Text Helpers
+ * ======================================== */
+.ipl-text-muted {
+    color: var(--ipl-muted);
+}
+
+.ipl-text-dim {
+    color: var(--ipl-muted);
+    opacity: 0.85;
+}
+
+.ipl-text-success {
+    color: var(--ipl-success);
+}
+
+.ipl-text-danger {
+    color: var(--ipl-danger);
+}
+
+.ipl-warn-danger {
+    color: var(--ipl-danger);
+}
+
+@media (prefers-color-scheme: dark) {
+    .ipl-text-success {
+        color: #4ade80;
+    }
+
+    .ipl-text-danger,
+    .ipl-warn-danger {
+        color: #f87171;
+    }
+}
+
+/* ========================================
+ * Code Chip / Textarea
+ * ======================================== */
+.ipl-code {
+    padding: 4px 8px;
+    font-size: 12px;
+    background: var(--ipl-surface-2);
+    border: 1px solid var(--ipl-border);
+    color: var(--ipl-text);
+}
+
+.ipl-textarea-code {
+    border: 1px solid #ddd;
+    background: #fff;
+    color: inherit;
+}
+
+@media (prefers-color-scheme: dark) {
+    .ipl-textarea-code {
+        border-color: #444;
+        background: #1e1e1e;
+        color: #e5e5e5;
+    }
+}
